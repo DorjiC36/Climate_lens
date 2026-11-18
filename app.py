@@ -157,39 +157,19 @@ if page == "Dashboard":
         )
         chart_caption("The box shows the middle half of yearly readings; the center line is the median and isolated points are outliers.")
 
-    left,right = st.columns(2)
-    with left:
-        xcol = "CO2 Emissions (Tons/Capita)"
-        ycol = "Avg Temperature (°C)"
-        scatter = df[[xcol,ycol,"Country","Year"]].dropna()
-        fig = px.scatter(
-            scatter,x=xcol,y=ycol,color="Country",hover_data=["Year"],
-            trendline="ols",trendline_scope="overall",
-            title="Do CO₂ emissions and temperature move together?",
-            color_discrete_sequence=CHART_COLORS,
-        )
-        fig.update_traces(marker=dict(size=7,opacity=.68))
-        fig.update_layout(xaxis_title="CO₂ emissions (tons per capita)",
-                          yaxis_title="Average temperature (°C)")
-        st.plotly_chart(
-            style(fig,430), width="stretch",
-            alt="Country-year observations comparing CO₂ emissions per capita with average temperature.",
-        )
-        chart_caption("Each dot is a country-year record; the line summarizes the overall association, not proof that one measure causes the other.")
-    with right:
-        annual_events = df.groupby("Year",as_index=False)["Extreme Weather Events"].sum()
-        fig = px.line(
-            annual_events, x="Year", y="Extreme Weather Events", markers=True,
-            color_discrete_sequence=[CORAL],
-            title="When were extreme weather events recorded?",
-        )
-        fig.update_traces(line_width=3, marker_size=7)
-        fig.update_layout(xaxis_title="Year", yaxis_title="Recorded events")
-        st.plotly_chart(
-            style(fig,430), width="stretch",
-            alt="Total recorded extreme weather events across selected countries by year.",
-        )
-        chart_caption("Each point is the total number of recorded events across the selected countries for that year.")
+    annual_events = df.groupby("Year",as_index=False)["Extreme Weather Events"].sum()
+    fig = px.line(
+        annual_events, x="Year", y="Extreme Weather Events", markers=True,
+        color_discrete_sequence=[CORAL],
+        title="When were extreme weather events recorded?",
+    )
+    fig.update_traces(line_width=3, marker_size=7)
+    fig.update_layout(xaxis_title="Year", yaxis_title="Recorded events")
+    st.plotly_chart(
+        style(fig,430), width="stretch",
+        alt="Total recorded extreme weather events across selected countries by year.",
+    )
+    chart_caption("Each point is the total number of recorded events across the selected countries for that year.")
 
     left,right = st.columns(2)
     with left:
@@ -220,40 +200,71 @@ if page == "Dashboard":
         )
         chart_caption("The line shows the annual average; the shaded area makes changes over time easier to see.")
 
-    st.subheader("Explore other climate relationships", icon=":material/scatter_plot:")
-    left,right = st.columns(2)
-    with left:
-        energy_x = "Renewable Energy (%)"
-        emissions_y = "CO2 Emissions (Tons/Capita)"
-        energy_emissions = df[[energy_x,emissions_y,"Country","Year"]].dropna()
-        fig = px.scatter(
-            energy_emissions,x=energy_x,y=emissions_y,color="Country",
-            hover_data=["Year"],trendline="ols",trendline_scope="overall",
+    st.subheader("Compare countries by climate indicator", icon=":material/bar_chart:")
+    profile_columns = [
+        "Avg Temperature (°C)",
+        "CO2 Emissions (Tons/Capita)",
+        "Renewable Energy (%)",
+        "Sea Level Rise (mm)",
+    ]
+    profile_labels = {
+        "Avg Temperature (°C)": "Temperature (°C)",
+        "CO2 Emissions (Tons/Capita)": "CO₂ emissions per capita (tons)",
+        "Renewable Energy (%)": "Renewable energy (%)",
+        "Sea Level Rise (mm)": "Sea-level rise (mm)",
+    }
+    profiles = (
+        df.groupby("Country",as_index=False)[profile_columns]
+        .mean()
+        .dropna(subset=profile_columns)
+        .sort_values("Country")
+        .reset_index(drop=True)
+    )
+    if profiles.empty:
+        st.info("No countries have complete values for all four indicators in the selected filters.")
+    else:
+        profile_long = profiles.melt(
+            id_vars="Country", value_vars=profile_columns,
+            var_name="Indicator", value_name="Average",
+        )
+        profile_long["Indicator"] = profile_long["Indicator"].map(profile_labels)
+        indicator_order = list(profile_labels.values())
+        fig = px.bar(
+            profile_long, x="Average", y="Country", color="Indicator",
+            facet_col="Indicator", facet_col_wrap=2, orientation="h",
+            category_orders={"Indicator":indicator_order},
+            labels={
+                "Average":"Average across selected years",
+                "Country":"",
+                "Indicator":"Climate indicator",
+            },
             color_discrete_sequence=CHART_COLORS,
-            title="How renewable energy use relates to CO₂ emissions",
+            title="Country averages by climate indicator",
         )
-        fig.update_layout(xaxis_title="Renewable energy (%)",
-                          yaxis_title="CO₂ emissions (tons per capita)")
+        fig.update_layout(showlegend=False)
+        fig.update_xaxes(matches=None)
+        fig.update_yaxes(matches=None, categoryorder="total ascending", autorange="reversed")
+        fig.update_traces(hovertemplate="%{y}<br>%{x:.2f}<extra></extra>")
         st.plotly_chart(
-            style(fig,430), width="stretch",
-            alt="Country-year comparison of renewable energy use and CO₂ emissions per capita with an overall trend line.",
+            style(fig,780), width="stretch",
+            alt="Four ranked horizontal bar charts compare selected countries' average temperature, CO₂ emissions, renewable energy, and sea-level rise.",
         )
-        chart_caption("Each dot is a country-year record. The trend line summarizes the overall association, not causation.")
-    with right:
-        decadal = df.assign(Decade=(df["Year"] // 10) * 10)
-        sea_decade = decadal.groupby("Decade",as_index=False)["Sea Level Rise (mm)"].mean()
-        fig = px.line(
-            sea_decade,x="Decade",y="Sea Level Rise (mm)",markers=True,
-            color_discrete_sequence=[SKY],
-            title="How sea-level rise differs by decade",
-        )
-        fig.update_traces(line_width=3, marker_size=8)
-        fig.update_layout(xaxis_title="Decade", yaxis_title="Average sea-level rise (mm)")
-        st.plotly_chart(
-            style(fig,430), width="stretch",
-            alt="Average sea-level rise for each decade in the selected years.",
-        )
-        chart_caption("Each point is the average across the selected countries within that decade.")
+        chart_caption("Each panel ranks country averages for one indicator. Panels use separate scales and units, so compare countries within a panel rather than comparing bar lengths across indicators.")
+
+    decadal = df.assign(Decade=(df["Year"] // 10) * 10)
+    sea_decade = decadal.groupby("Decade",as_index=False)["Sea Level Rise (mm)"].mean()
+    fig = px.line(
+        sea_decade,x="Decade",y="Sea Level Rise (mm)",markers=True,
+        color_discrete_sequence=[SKY],
+        title="How sea-level rise differs by decade",
+    )
+    fig.update_traces(line_width=3, marker_size=8)
+    fig.update_layout(xaxis_title="Decade", yaxis_title="Average sea-level rise (mm)")
+    st.plotly_chart(
+        style(fig,430), width="stretch",
+        alt="Average sea-level rise for each decade in the selected years.",
+    )
+    chart_caption("Each point is the average across the selected countries within that decade.")
 
     st.subheader("Temperature patterns across decades", icon=":material/thermostat:")
     decadal_temperature = (
